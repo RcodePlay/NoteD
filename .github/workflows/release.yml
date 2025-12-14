@@ -38,6 +38,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./publish/${{ matrix.rid }}/${{ github.event.repository.name }}${{ matrix.rid == 'win-x64' && '.exe' || '' }}
-        asset_name: ${{ github.event.repository.name }}-${{ github.event.release.tag_name }}-${{ matrix.rid }}${{ matrix.rid == 'win-x64' && '.exe' || '' }}
+        asset_path: ./publish/${{ matrix.rid }}/NoteD${{ matrix.rid == 'win-x64' && '.exe' || '' }}
+        asset_name: NoteD-${{ github.event.release.tag_name }}-${{ matrix.rid }}${{ matrix.rid == 'win-x64' && '.exe' || '' }}
         asset_content_type: application/octet-stream
