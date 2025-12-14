@@ -2,14 +2,14 @@ name: Build and Release Binaries
 
 on:
   release:
-    types: [published]  # Triggers only when you publish a release (not on draft/pre-release)
+    types: [published]
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Can build both Linux and Windows binaries from Ubuntu runner
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        rid: [linux-x64, win-x64]  # Add 'osx-x64' or 'linux-arm64' here if desired
+        rid: [linux-x64, win-x64]
 
     steps:
     - name: Checkout code
@@ -18,7 +18,7 @@ jobs:
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '10.0.x'  # Will use the latest .NET 10 SDK
+        dotnet-version: '10.0.x'
 
     - name: Restore dependencies
       run: dotnet restore
@@ -29,7 +29,7 @@ jobs:
           -r ${{ matrix.rid }} \
           --self-contained true \
           /p:PublishSingleFile=true \
-          /p:IncludeNativeLibrariesForSelfExtract=true  # Recommended for better single-file behavior on Linux
+          /p:IncludeNativeLibrariesForSelfExtract=true \
           --output ./publish/${{ matrix.rid }}
 
     - name: Upload binaries to release
