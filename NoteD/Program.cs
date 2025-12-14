@@ -1,10 +1,25 @@
 ﻿using Terminal.Gui;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NStack;
 
 
 Application.Init();
+
+string? notesFolder = null;
+string? currentFilePath = null;
+
+var noteFiles = new ObservableCollection<string>();
+
+var isNoteDirty = false;
+Timer? autoSaveTimer = null;
+
+SettingsManager.LoadSettings();
+
+// Will use this line for later customization of accent color
+// Colors.Base.Normal = Application.Driver.MakeAttribute(Color.Green, Color.Black);
 
 var listView = new ListView
 {
@@ -26,10 +41,17 @@ var textView = new TextView
     CanFocus = true
 };
 
-string? notesFolder = null;
-string? currentFilePath = null;
-
-var noteFiles = new ObservableCollection<string>();
+textView.KeyPress += (key) =>
+{
+    if (key.KeyEvent.Key >= Key.Space || 
+        key.KeyEvent.Key == Key.Backspace || 
+        key.KeyEvent.Key == Key.Delete || 
+        key.KeyEvent.Key == Key.Enter)
+    {
+        isNoteDirty = true;
+    }
+    key.Handled = false; 
+};
 
 notesFolder = LoadOrChooseNotesFolder();
 
@@ -53,6 +75,20 @@ var menu = new MenuBar
             new MenuItem("_Save Current Note", "", SaveCurrentNote),
             new MenuItem("_Delete Selected Note", "", DeleteSelectedNote),
             new MenuItem("_Quit", "", () => Application.RequestStop())
+        ]),
+        new MenuBarItem("_Settings",
+        [
+            new MenuItem("_Open Settings File", "", () =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SettingsManager.SettingsFilePath) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.ErrorQuery("Error", $"Could not open settings file:\n{ex.Message}", "OK");
+                }
+            })
         ])
     ]
 };
@@ -61,6 +97,16 @@ win.Add(listView, textView);
 
 Application.Top.Add(menu, win);
 
+if (SettingsManager.Settings.AutoSaveEnabled)
+{
+    autoSaveTimer = new Timer(
+        callback: (_) => Application.MainLoop.Invoke(SaveNoteIfDirty),
+        state: null,
+        dueTime: SettingsManager.Settings.AutoSaveDelayMs, 
+        period: SettingsManager.Settings.AutoSaveDelayMs 
+    );
+}
+
 RefreshNoteList();
 
 listView.SelectedItemChanged += (args) =>
@@ -68,12 +114,18 @@ listView.SelectedItemChanged += (args) =>
     var sel = args.Item;
     if (noteFiles.Count == 0 || sel < 0 || sel >= noteFiles.Count) return;
 
+    if (isNoteDirty)
+    {
+        SaveNoteIfDirty(); 
+    }
+
     var selectedFile = Path.Combine(notesFolder!, noteFiles[sel]);
 
     if (File.Exists(selectedFile))
     {
         textView.Text = File.ReadAllText(selectedFile);
         currentFilePath = selectedFile;
+        isNoteDirty = false;
     }
 };
 
@@ -88,12 +140,20 @@ void RefreshNoteList()
         return;
     }
 
-    var files = Directory.GetFiles(notesFolder!, "*.md")
+    if (notesFolder == null)
+    {
+        noteFiles.Clear();
+        listView.SetSource(noteFiles);
+        return;
+    }
+
+    var files = Directory.GetFiles(notesFolder, "*.md")
         .Select(Path.GetFileName)
+        .Cast<string>()
         .OrderByDescending(f => f)
         .ToList();
-
-    // Update backing collection
+    
+    
     noteFiles.Clear();
     foreach (var f in files) noteFiles.Add(f);
     listView.SetSource(noteFiles);
@@ -138,7 +198,7 @@ void ChooseNotesFolder()
 
     okButton.Clicked += () =>
     {
-        var path = (textField.Text ?? ustring.Empty).ToString().Trim();
+        var path = (textField.Text ?? ustring.Empty).ToString()!.Trim(); 
         if (!string.IsNullOrEmpty(path))
         {
             try
@@ -217,7 +277,7 @@ void CreateNewNote()
 
     ok.Clicked += () =>
     {
-        var optional = (nameField.Text ?? ustring.Empty).ToString().Trim();
+        var optional = (nameField.Text ?? ustring.Empty).ToString()!.Trim(); 
         var date = DateTime.Today.ToString("yyyy-MM-dd");
         var slug = string.IsNullOrWhiteSpace(optional) ? "" : $"-{optional}";
         var filename = $"{date}{slug}.md";
@@ -239,6 +299,7 @@ void CreateNewNote()
             listView.SelectedItem = index;
             textView.Text = "";
             currentFilePath = fullPath;
+            isNoteDirty = false;
             textView.SetFocus();
         }
 
@@ -249,6 +310,22 @@ void CreateNewNote()
     nameDialog.AddButton(ok);
 
     Application.Run(nameDialog);
+}
+
+void SaveNoteIfDirty()
+{
+    if (isNoteDirty && !string.IsNullOrEmpty(currentFilePath) && !string.IsNullOrEmpty(notesFolder))
+    {
+        try
+        {
+            File.WriteAllText(currentFilePath, textView.Text!.ToString());
+            isNoteDirty = false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Auto-Save Failed: {ex.Message}");
+        }
+    }
 }
 
 void SaveCurrentNote()
@@ -262,6 +339,7 @@ void SaveCurrentNote()
     try
     {
         File.WriteAllText(currentFilePath, textView.Text!.ToString());
+        isNoteDirty = false; // Reset dirty flag after manual save
         MessageBox.Query("Saved", $"Saved to {Path.GetFileName(currentFilePath)}", "OK");
     }
     catch (Exception ex)
@@ -287,6 +365,7 @@ void DeleteSelectedNote()
             RefreshNoteList();
             textView.Text = "";
             currentFilePath = null;
+            isNoteDirty = false;
         }
         catch (Exception ex)
         {
@@ -296,4 +375,84 @@ void DeleteSelectedNote()
 }
 
 Application.Run();
+autoSaveTimer?.Dispose();
 Application.Shutdown();
+
+public class NoteDSettings
+{
+    [JsonPropertyName("auto_save_enabled")]
+    public bool AutoSaveEnabled { get; } = true;
+
+    [JsonPropertyName("auto_save_delay_ms")]
+    public int AutoSaveDelayMs { get; } = 5000;
+    
+    [JsonPropertyName("show_markdown_preview")]
+    public bool ShowMarkdownPreview { get; }
+}
+
+public static class SettingsManager
+{
+    public static NoteDSettings Settings { get; private set; } = new ();
+
+    public static string SettingsFilePath
+    {
+        get
+        {
+            var appDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "NoteD"
+            );
+            Directory.CreateDirectory(appDataFolder);
+            return Path.Combine(appDataFolder, "settings.json");
+        }
+    }
+
+    public static void LoadSettings()
+    {
+        var path = SettingsFilePath;
+        if (File.Exists(path))
+        {
+            try
+            {
+                var jsonString = File.ReadAllText(path);
+                var loadedSettings = JsonSerializer.Deserialize<NoteDSettings>(jsonString);
+                
+                if (loadedSettings != null)
+                {
+                    Settings = loadedSettings;
+                }
+                else
+                {
+                    Settings = new NoteDSettings(); 
+                    SaveSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading settings: {ex.Message}");
+                Settings = new NoteDSettings();
+                SaveSettings();
+            }
+        }
+        else
+        {
+            Settings = new NoteDSettings();
+            SaveSettings();
+        }
+    }
+
+    private static void SaveSettings()
+    {
+        var path = SettingsFilePath;
+        try
+        {
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            var jsonString = JsonSerializer.Serialize(Settings, options);
+            File.WriteAllText(path, jsonString);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving settings: {ex.Message}");
+        }
+    }
+}

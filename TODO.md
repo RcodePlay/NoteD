@@ -5,9 +5,7 @@
     - Color themes
     - Command palette (VSCode style)
     - Nested folders display
-    - config.json for settings
     - Markdown rendering preview
-    - Auto-save
     - Syntax highlighting
     - Fuzzy search
     - Note tagging/metadata
@@ -16,3 +14,7 @@
     - External editor hook
     - Theme switching (preset themes, community, user specific)
     - 
+
+- Features added:
+    - Auto-save
+    - settings.json for settings
