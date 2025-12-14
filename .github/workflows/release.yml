@@ -11,6 +11,9 @@ jobs:
       matrix:
         rid: [linux-x64, win-x64]
 
+    permissions:
+      contents: write
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
