@@ -1,0 +1,18 @@
+- Features to add:
+    - Better keyboard shortcuts
+    - Icons for organization
+    - Moving files between folders
+    - Color themes
+    - Command palette (VSCode style)
+    - Nested folders display
+    - config.json for settings
+    - Markdown rendering preview
+    - Auto-save
+    - Syntax highlighting
+    - Fuzzy search
+    - Note tagging/metadata
+    - Recent notes list
+    - Smart status bar (Line/Column number, size in words and characters, file saved timestamp, read-only status)
+    - External editor hook
+    - Theme switching (preset themes, community, user specific)
+    - 
